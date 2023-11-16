@@ -1,0 +1,38 @@
+POST http://localhost:9000/pedido
+
+
+###
+GET http://localhost:9000/postres
+
+
+###
+GET http://localhost:9000/menu
+###
+
+
+GET http://localhost:9000/menu/9
+###
+GET http://localhost:9000/combos
+###
+GET http://localhost:9000/pedidos/1
+###
+
+
+POST http://localhost:9000/pedido HTTP/1.1
+Content-Type: application/json
+
+
+{
+    "productos": [
+        {
+            "id": 15,
+            "cantidad": 8
+        },
+        {
+            "id": 18,
+            "cantidad": 2
+        }
+    ]
+}
+###
+GET http://localhost:9000/pedidos/1
