@@ -1,135 +1,163 @@
 const express = require('express');
-const mysql2 = require('mysql2');
-const bcrypt = require('bcrypt');
+const mysql = require('mysql2');
 
-const connection = mysql2.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'rootroot',
-    database: 'burguertic'
-});
-
-connection.connect((err) => {
-    if (err){
-       return console.error("No se pudo conectar " + err)
-    }
-});
-
+// Crea una aplicación Express
 const app = express();
-
 app.use(express.json());
 
+const PORT = 9000;
+const bycrypt = require('bcrypt');
 
+// Establece una conexión a la base de datos MySQL
+const connection = mysql.createConnection({
+    host: "localhost",
+    user: "root",
+    password: "",
+    database: "burguertic",
+});
 
+// Conéctate a la base de datos
+connection.connect((err) => {
+    if (err) {
+        console.error("Error conectándose: " + err);
+        return;
+    }
+
+    console.log("Base de datos conectada");
+});
+
+// Endpoint para obtener el menú completo
 app.get('/menu', (_, res) => {
-    connection.query("SELECT * FROM platos", (err, rows) => {
-        if (err) return res.status(500).json(err);
+    connection.query('SELECT * FROM platos', (err, rows) => {
+        if (err) {
+            console.error("Error consultando: " + err);
+            return;
+        }
         res.status(200).json(rows);
     });
 });
 
-
+// Endpoint para obtener un plato específico por ID
 app.get('/menu/:id', (req, res) => {
-    connection.query("SELECT * FROM platos WHERE id = ?;", [req.params.id], (err, rows) => {
-        if (err) return res.status(500).json(err);
-        if (rows.length === 0)
-            return res.status(404).json("Plato no encontrado");
+    connection.query('SELECT * FROM platos WHERE id = ?', [req.params.id], (err, rows) => {
+        if (err) {
+            return res.status(500).json(err);
+        }
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Plato no encontrado' });
+        }
         res.status(200).json(rows[0]);
     });
 });
 
-
-
+// Endpoint para obtener solo platos de combo
 app.get('/combos', (_, res) => {
-    connection.query("SELECT * FROM platos WHERE tipo = 'combo';", (err, rows) => {
-        if (err) return res.status(500).json(err);
-        if (rows.length === 0)
-            return res.Status(404);
+    connection.query('SELECT * FROM platos WHERE tipo = ?', ['combo'], (err, rows) => {
+        if (err) {
+            return res.status(500).json(err);
+        }
         res.status(200).json(rows);
     });
 });
 
-
-
+// Endpoint para obtener solo platos principales
 app.get('/principales', (_, res) => {
-    connection.query("SELECT * FROM platos WHERE tipo = 'principal';", (err, rows) => {
-        if (err) return res.status(500).json(err);
-        if (rows.length === 0)
-            return res.sendStatus(404);
+    connection.query('SELECT * FROM platos where tipo = ?', ['principal'], (err, rows) => {
+        if (err) {
+            return res.status(500).json(err);
+        }
         res.status(200).json(rows);
     });
 });
 
-
+// Endpoint para obtener solo postres
 app.get('/postres', (_, res) => {
-    connection.query("SELECT * FROM platos WHERE tipo = 'postre';", (err, rows) => {
-        if (err) return res.status(500).json(err);
-        if (rows.length === 0)
-            return res.sendStatus(404);
+    connection.query('SELECT * FROM platos where tipo = ?', ['postre'], (err, rows) => {
+        if (err) {
+            return res.status(500).json(err);
+        }
         res.status(200).json(rows);
     });
 });
 
-//5
+// Endpoint para realizar un pedido
 app.post('/pedido', (req, res) => {
-    const { productos } = req.body; // OBTIENE LA LISTA DE PRODUCTOS DEL CUERPO DE LA SOLICITUD
+    // Obtén el array de IDs de platos desde el cuerpo de la solicitud
+    const { productos } = req.body;
 
-
-    // VERIFICA SI NO HAY PRODUCTOS O SI EL PEDIDO ESTÁ VACÍO, RESPONDE CON UN ERROR
-    if (!productos || productos.length == 0) {
-        return res.status(404).json({ msg: 'No se han agregado productos al pedido' });
+    // Valida la solicitud
+    if (!Array.isArray(productos) || productos.length === 0) {
+        return res.status(400).json('La solicitud debe incluir un array de platos o al menos un plato');
     }
 
-    // REALIZA UNA INSERCIÓN EN LA TABLA 'pedidos' 
-    connection.query("INSERT INTO pedidos (id_usuario, fecha, estado) VALUES (?,?,? )", [1,new Date(),"pendiente"],(err, response) => {
+    // Obtiene el menú desde la base de datos
+    connection.query('SELECT * FROM platos', (err, rows) => {
         if (err) {
-            console.error("Error consultando: " + err);
-            return;
-        } else {
-            const id_pedido = response.insertId; // OBTIENE EL ID DEL PEDIDO INSERTADO
-
-            // QUERY PARA INSERTAR LOS PRODUCTOS EN LA TABLA 'pedidos_platos'
-            let insert = "INSERT INTO pedidos_platos (id_pedido, id_plato, cantidad) VALUES ";
-            let argumentos = [];
-            productos.forEach((plato, i) => {
-                insert += "(?, ?, ?)"; 
-                argumentos.push(id_pedido, plato.id, plato.cantidad); // AGREGA LOS ARGUMENTOS PARA EL PRODUCTO ACTUAL
-                if (i !== productos.length - 1) {
-                    insert += ", "; 
-                }
-            });
-
-            // QUERY PARA INSERTAR LOS PRODUCTOS EN LA TABLA 'pedidos_platos'zzz
-            
-            connection.query(insert, argumentos, (err, result) => {
-                if (err) {
-                    console.error("Error consultando: " + err); // SI HAY UN ERROR EN LA CONSULTA SQL, MUESTRA UN MENSAJE DE ERROR EN LA CONSOLA
-                    return;
-                } else {
-                    res.status(200).json({ id_pedido }); // SI TODO ES EXITOSO, RESPONDE CON UN MENSAJE DE ÉXITO
-                }
+            console.error('Error consultando: ' + err);
+            return res.status(500).json({
+                msg: 'Error al consultar los platos en la base de datos',
             });
         }
+
+        // Mapea las filas a un array de IDs de platos
+        const menu = rows.map((row) => ({
+            id: row.id,
+        }));
+
+        // Valida cada ID de plato en la solicitud
+        for (let i = 0; i < productos.length; i++) {
+            const plato = menu.find((p) => p.id === productos[i].id);
+            if (!plato) {
+                return res.status(400).json('El id del plato no es válido');
+            }
+        }
+
+        // Inserta el pedido y los detalles del pedido en la base de datos
+        connection.query(
+            'INSERT INTO pedidos (id_usuario, fecha,estado) VALUES (?, ?,?)',
+            [1, new Date(), "pendiente"],
+            (err, response) => {
+                if (err) {
+                    console.error(err);
+                    return res.status(500).json({
+                        msg: 'Error al crear el pedido' + err,
+                    });
+                }
+
+                const pedidoID = response.insertId;
+                for (let i = 0; i < productos.length; i++) {
+                    connection.query(
+                        'INSERT INTO pedidos_platos (id_pedido, id_plato, cantidad) VALUES (?, ?, ?)',
+                        [pedidoID, productos[i].id, productos[i].cantidad],
+                        (err) => {
+                            if (err) {
+                                console.error('Error al insertar plato en el pedido: ' + err);
+                            }
+                        }
+                    );
+                }
+
+                res.status(200).json({
+                    id: pedidoID,
+                });
+            }
+        );
     });
 });
 
-
-
-
-   
-//6
-       
+// Endpoint para obtener todos los pedidos de un usuario
 app.get("/pedidos/:id", (req, res) => {
     const id = req.params.id;
-    connection.query("SELECT pedidos.*, platos.*, pedidos_platos.id_pedido, pedidos_platos.cantidad FROM pedidos INNER JOIN pedidos_platos ON pedidos.id = pedidos_platos.id_pedido INNER JOIN platos ON pedidos_platos.id_plato=platos.id WHERE pedidos.id_usuario=?", id, (err, rows) => {
+    connection.query("SELECT pedidos.*, platos.*, pedidos_platos.id_pedido, pedidos_platos.cantidad FROM pedidos INNER JOIN pedidos_platos ON pedidos.id = pedidos_platos.id_pedido INNER JOIN platos ON pedidos_platos.id_plato=platos.id WHERE pedidos.id_usuario=?", id, (err, result) => {
         if (err) {
-            console.error("Error consultando: " + err);
-            return;
+            return res.status(500).json(err);
         }
-        else {
-            let pedidos = []
-            rows.forEach((row) => {
-                if (!pedidos.find((p) => p.id === row.id_pedido)){
+        if (result.length === 0 || !result) {
+            return res.status(404).json({ error: 'Pedido no encontrado' });
+        } else {
+            let pedidos = [];
+            result.forEach((row) => {
+                if (!pedidos.find((p) => p.id === row.id_pedido)) {
                     pedidos.push({
                         "id": row.id_pedido,
                         "fecha": row.fecha,
@@ -145,14 +173,15 @@ app.get("/pedidos/:id", (req, res) => {
                         ]
                     })
                 } else {
-                    const newPedido = pedidos.find((p) => p.id === row.id_pedido);
-                    newPedido.platos.push({
+                    const agregarPedido = pedidos.find((p) => p.id === row.id_pedido);
+                    agregarPedido.platos.push({
                         "id": row.id,
                         "nombre": row.nombre,
                         "precio": row.precio,
-                        "cantidad": row.cantidad});
+                        "cantidad": row.cantidad
+                    });
                     pedidos = pedidos.filter((p) => p.id !== row.id_pedido);
-                    pedidos.push(newPedido);
+                    pedidos.push(agregarPedido);
                 }
             });
             res.json(pedidos);
@@ -160,110 +189,12 @@ app.get("/pedidos/:id", (req, res) => {
     });
 });
 
-app.listen(9000, () => {
-    console.log('Escuchando en puerto 9000');
+// Endpoint para crear un nuevo usuario
+app.post("/usuarios", (req, res) => {
+    // Agrega el código para crear un nuevo usuario
 });
 
-
-
-
-//INTENTO DE ALGO?
-
-app.post('/usuarios', async (req, res) => {
-    try {
-        const { nombre, apellido, email, password } = req.body;
-        const hash = await bcrypt.hash(password, 10);
-        const id = await pool.query('INSERT INTO usuarios SET ?', [{ nombre, apellido, email, password: hash }]);
-        res.json({ id: id.insertId });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Algo salió mal, por favor intente nuevamente' });
-    }
+// Inicia el servidor
+app.listen(PORT, () => {
+    console.log(`Servidor ejecutándose en el puerto ${PORT}`);
 });
-
-app.post('/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const [user] = await pool.query('SELECT * FROM usuarios WHERE email = ?', [email]);
-        if (!user) {
-            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
-        }
-        const isPasswordCorrect = await bcrypt.compare(password, user.password);
-        if (!isPasswordCorrect) {
-            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
-        }
-        res.json({ id: user.id, nombre: user.nombre, apellido: user.apellido, email: user.email });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Algo salió mal, por favor intente nuevamente' });
-    }
-}); 
-
-app.post('/pedidos', async (req, res) => {
-    try {
-        const id = req.header('Authorization');
-        
-    const [usuario] = await pool.query('SELECT * FROM usuarios WHERE id = ?', [id]);
-    if (!usuario) {
-        return res.status(400).json({ error: 'Usuario no encontrado' });
-    }
-    const pedido = { usuario_id: id, ...req.body };
-    const idPedido = await pool.query('INSERT INTO pedidos SET ?', [pedido]);
-    res.json({ id: idPedido.insertId });
-} catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Algo salió mal, por favor intente nuevamente' });
-}
-});
-
-app.get('/pedidos', async (req, res) => {
-    try {
-        const id = req.header('Authorization');
-        const pedidos = await pool.query('SELECT * FROM pedidos WHERE usuario_id = ?', [id]);
-        res.json(pedidos);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Algo salió mal, por favor intente nuevamente' });
-    }
-});
-
-app.post('/usuarios', async (req, res) => {
-    try {
-        const { nombre, apellido, email, password } = req.body;
-        const hash = await bcrypt.hash(password, 10);
-        const id = await pool.query('INSERT INTO usuarios SET ?', [{ nombre, apellido, email, password: hash }]);
-        res.json({ id: id.insertId });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Algo salió mal, por favor intente nuevamente' });
-    }
-});
-
-app.post('/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const [user] = await pool.query('SELECT * FROM usuarios WHERE email = ?', [email]);
-        if (!user) {
-            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
-        }
-        const isPasswordCorrect = await bcrypt.compare(password, user.password);
-        if (!isPasswordCorrect) {
-            return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
-        }
-        res.json({ id: user.id, nombre: user.nombre, apellido: user.apellido, email: user.email });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Algo salió mal, por favor intente nuevamente' });
-    }
-});
-
-app.post('/pedidos', async (req, res) => {
-    try {
-        const id = req.header('Authorization');
-        const [usuario] = await pool.query('SELECT * FROM usuarios WHERE id = ?', [id]);
-        if (!usuario) {
-            return res.status(400).json({ error: 'Usuario no encontrado' });
-        }
-        const pedido = { usuario_id: id, ...req.body };
-        const idPedido = await pool.query('INSERT INTO pedidos SET ?', [pedido]);
-        res.json({ 

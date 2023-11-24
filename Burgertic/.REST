@@ -36,3 +36,14 @@ Content-Type: application/json
 }
 ###
 GET http://localhost:9000/pedidos/1
+
+###
+POST http://localhost:9000/usuarios HTTP/1.1
+Content-Type: application/json 
+
+{
+    "nombre": "juan",
+    "apellido": "perez",
+    "email": "email@gmail.com",
+    "password": "123"
+}
